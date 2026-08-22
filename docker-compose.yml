@@ -1,0 +1,22 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: achievement-app
+    restart: unless-stopped
+    ports:
+      - "8000:8080"
+    volumes:
+      - ./storage:/var/www/html/storage
+      - ./public:/var/www/html/public:ro
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
