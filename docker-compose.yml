@@ -16,6 +16,24 @@ services:
     networks:
       - app-network
 
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: achievement-app
+    restart: unless-stopped
+    command: php artisan queue:work --tries=3 --backoff=5
+    volumes:
+      - .:/var/www/html
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - app-network
+    depends_on:
+      - api
+
 networks:
   app-network:
     driver: bridge
