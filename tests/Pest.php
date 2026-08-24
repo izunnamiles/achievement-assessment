@@ -84,3 +84,13 @@ function makeBadge(array $attributes = []): \App\Models\Badge
 {
     return (new \App\Models\Badge)->forceFill($attributes);
 }
+
+function makeAchievement(array $attributes = []): \App\Models\Achievement
+{
+    return (new \App\Models\Achievement)->forceFill($attributes);
+}
+
+function makeBankAccount(array $attributes = []): \App\Models\BankAccount
+{
+    return (new \App\Models\BankAccount)->forceFill($attributes);
+}

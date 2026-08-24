@@ -1,6 +1,7 @@
 <?php
 
 use App\Actions\RecordPurchaseAction;
+use App\Contracts\Repositories\ProductRepositoryInterface;
 use App\Enums\AchievementType;
 use App\Models\Achievement;
 use App\Models\Product;
@@ -24,7 +25,7 @@ beforeEach(function () {
 
 test('a user unlocks the first purchase achievement on their first purchase', function () {
     $user = User::factory()->create();
-    $product = Product::factory()->create();
+    $product = Product::factory()->create(['stock' => 1]);
 
     app(RecordPurchaseAction::class)->execute($user, $product);
 
@@ -34,7 +35,7 @@ test('a user unlocks the first purchase achievement on their first purchase', fu
 
 test('a user unlocks the 5 purchases achievement on their fifth purchase', function () {
     $user = User::factory()->create();
-    $product = Product::factory()->create();
+    $product = Product::factory()->create(['stock' => 5]);
     $recordPurchase = app(RecordPurchaseAction::class);
 
     for ($i = 1; $i <= 5; $i++) {
@@ -48,7 +49,7 @@ test('a user unlocks the 5 purchases achievement on their fifth purchase', funct
 
 test('an achievement is never unlocked twice for the same user', function () {
     $user = User::factory()->create();
-    $product = Product::factory()->create();
+    $product = Product::factory()->create(['stock' => 2]);
     $recordPurchase = app(RecordPurchaseAction::class);
 
     $recordPurchase->execute($user, $product);
@@ -97,4 +98,21 @@ test('the purchase api rejects an out-of-stock product', function () {
     $this->withToken($token)
         ->postJson('/api/purchases', ['product_id' => $product->uuid])
         ->assertStatus(422);
+});
+
+test('the purchase api 404s as JSON if the product vanishes between validation and lookup', function () {
+    $product = Product::factory()->create();
+    $user = User::factory()->create();
+    $token = auth('api')->login($user);
+
+    $this->mock(ProductRepositoryInterface::class)
+        ->shouldReceive('findByUuid')
+        ->once()
+        ->andReturn(null);
+
+    $this->withToken($token)
+        ->postJson('/api/purchases', ['product_id' => $product->uuid])
+        ->assertStatus(404)
+        ->assertHeader('Content-Type', 'application/json')
+        ->assertJsonPath('message', 'Product not found.');
 });

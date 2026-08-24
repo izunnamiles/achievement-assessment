@@ -1,6 +1,7 @@
 <?php
 
 use App\Exceptions\InsufficientStockException;
+use App\Exceptions\PaystackRecipientCreationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -22,6 +23,10 @@ return Application::configure(basePath: dirname(__DIR__))
         );
 
         $exceptions->render(fn (InsufficientStockException $e) => response()->json([
+            'message' => $e->getMessage(),
+        ], 422));
+
+        $exceptions->render(fn (PaystackRecipientCreationException $e) => response()->json([
             'message' => $e->getMessage(),
         ], 422));
     })->create();

@@ -37,7 +37,7 @@ beforeEach(function () {
 
 function unlockBothAchievementsFor(User $user): void
 {
-    $product = Product::factory()->create();
+    $product = Product::factory()->create(['stock' => 5]);
     $recordPurchase = app(RecordPurchaseAction::class);
 
     for ($i = 1; $i <= 5; $i++) {

@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Tymon\JWTAuth\Contracts\JWTSubject;
@@ -64,5 +65,10 @@ class User extends Authenticatable implements JWTSubject
         return $this->belongsToMany(Badge::class, 'user_badges')
             ->withPivot('unlocked_at')
             ->withTimestamps();
+    }
+
+    public function bankAccount(): HasOne
+    {
+        return $this->hasOne(BankAccount::class);
     }
 }

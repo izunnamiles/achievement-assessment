@@ -22,7 +22,7 @@ class PurchaseController extends Controller
 
         $product = $products->findByUuid($validated['product_id']);
 
-        abort_if($product === null, 404);
+        abort_if($product === null, 404, 'Product not found.');
 
         $purchase = $recordPurchase->execute($request->user(), $product, $validated['quantity'] ?? 1);
 
