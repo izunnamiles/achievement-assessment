@@ -5,29 +5,7 @@ use App\Contracts\Repositories\ProductRepositoryInterface;
 use App\Contracts\Repositories\PurchaseRepositoryInterface;
 use App\Events\PurchaseMade;
 use App\Exceptions\InsufficientStockException;
-use App\Models\Product;
-use App\Models\Purchase;
-use App\Models\User;
 use Illuminate\Support\Facades\Event;
-
-// Plain forceFill()'d instances instead of factories: factories resolve nested
-// Model::factory() attributes (and PurchaseFactory's `amount` closure, which
-// looks up the product) against a real database, even under make() — and this
-// suite intentionally has no migrated database.
-function makeUser(array $attributes = []): User
-{
-    return (new User)->forceFill($attributes);
-}
-
-function makeProduct(array $attributes = []): Product
-{
-    return (new Product)->forceFill(array_merge(['price' => 0, 'stock' => 0], $attributes));
-}
-
-function makePurchase(array $attributes = []): Purchase
-{
-    return (new Purchase)->forceFill($attributes);
-}
 
 beforeEach(fn () => Event::fake());
 

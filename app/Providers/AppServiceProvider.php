@@ -2,17 +2,22 @@
 
 namespace App\Providers;
 
+use App\Contracts\PaymentGatewayInterface;
 use App\Contracts\Repositories\AchievementRepositoryInterface;
+use App\Contracts\Repositories\BadgeRepositoryInterface;
 use App\Contracts\Repositories\ProductRepositoryInterface;
 use App\Contracts\Repositories\PurchaseRepositoryInterface;
+use App\Contracts\Repositories\SystemSettingRepositoryInterface;
 use App\Contracts\Repositories\UserAchievementRepositoryInterface;
-use App\Events\PurchaseMade;
-use App\Listeners\UnlockAchievementsOnPurchase;
+use App\Contracts\Repositories\UserBadgeRepositoryInterface;
 use App\Repositories\AchievementRepository;
+use App\Repositories\BadgeRepository;
 use App\Repositories\ProductRepository;
 use App\Repositories\PurchaseRepository;
+use App\Repositories\SystemSettingRepository;
 use App\Repositories\UserAchievementRepository;
-use Illuminate\Support\Facades\Event;
+use App\Repositories\UserBadgeRepository;
+use App\Services\Payments\PaystackPaymentGateway;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -26,6 +31,10 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(ProductRepositoryInterface::class, ProductRepository::class);
         $this->app->bind(AchievementRepositoryInterface::class, AchievementRepository::class);
         $this->app->bind(UserAchievementRepositoryInterface::class, UserAchievementRepository::class);
+        $this->app->bind(BadgeRepositoryInterface::class, BadgeRepository::class);
+        $this->app->bind(UserBadgeRepositoryInterface::class, UserBadgeRepository::class);
+        $this->app->bind(SystemSettingRepositoryInterface::class, SystemSettingRepository::class);
+        $this->app->bind(PaymentGatewayInterface::class, PaystackPaymentGateway::class);
     }
 
     /**
@@ -33,6 +42,6 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        Event::listen(PurchaseMade::class, UnlockAchievementsOnPurchase::class);
+        //
     }
 }

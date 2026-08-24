@@ -39,4 +39,9 @@ class UserAchievementRepository implements UserAchievementRepositoryInterface
             ->where('user_id', $user->id)
             ->get();
     }
+
+    public function countForUser(User $user): int
+    {
+        return UserAchievement::query()->where('user_id', $user->id)->count();
+    }
 }

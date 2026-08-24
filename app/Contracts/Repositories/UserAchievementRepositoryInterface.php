@@ -17,4 +17,6 @@ interface UserAchievementRepositoryInterface
      * @return Collection<int, UserAchievement>
      */
     public function unlockedForUser(User $user): Collection;
+
+    public function countForUser(User $user): int;
 }

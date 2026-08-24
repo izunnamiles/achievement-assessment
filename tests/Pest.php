@@ -51,3 +51,36 @@ function something()
 {
     // ..
 }
+
+/*
+|--------------------------------------------------------------------------
+| Model doubles
+|--------------------------------------------------------------------------
+|
+| Plain forceFill()'d instances for use in Unit tests. Model::factory()->make()
+| still resolves nested Model::factory() attributes (and any definition()
+| closures that query the database) for real, even under make() - which
+| breaks in Unit tests, since that suite intentionally has no migrated
+| database. These bypass factories entirely.
+|
+*/
+
+function makeUser(array $attributes = []): \App\Models\User
+{
+    return (new \App\Models\User)->forceFill($attributes);
+}
+
+function makeProduct(array $attributes = []): \App\Models\Product
+{
+    return (new \App\Models\Product)->forceFill(array_merge(['price' => 0, 'stock' => 0], $attributes));
+}
+
+function makePurchase(array $attributes = []): \App\Models\Purchase
+{
+    return (new \App\Models\Purchase)->forceFill($attributes);
+}
+
+function makeBadge(array $attributes = []): \App\Models\Badge
+{
+    return (new \App\Models\Badge)->forceFill($attributes);
+}

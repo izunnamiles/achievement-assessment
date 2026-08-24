@@ -23,5 +23,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         $this->call(AchievementSeeder::class);
+        $this->call(BadgeSeeder::class);
+        $this->call(SystemSettingSeeder::class);
     }
 }

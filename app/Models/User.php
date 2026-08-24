@@ -58,4 +58,11 @@ class User extends Authenticatable implements JWTSubject
             ->withPivot('unlocked_at')
             ->withTimestamps();
     }
+
+    public function badges(): BelongsToMany
+    {
+        return $this->belongsToMany(Badge::class, 'user_badges')
+            ->withPivot('unlocked_at')
+            ->withTimestamps();
+    }
 }
