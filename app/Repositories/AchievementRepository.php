@@ -17,6 +17,14 @@ class AchievementRepository implements AchievementRepositoryInterface
             ->get();
     }
 
+    public function all(): Collection
+    {
+        return Achievement::query()
+            ->orderBy('type')
+            ->orderBy('threshold')
+            ->get();
+    }
+
     public function findBySlug(string $slug): ?Achievement
     {
         return Achievement::query()->where('slug', $slug)->first();

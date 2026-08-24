@@ -13,5 +13,12 @@ interface AchievementRepositoryInterface
      */
     public function allByType(AchievementType $type): Collection;
 
+    /**
+     * All achievements, ordered by type then threshold.
+     *
+     * @return Collection<int, Achievement>
+     */
+    public function all(): Collection;
+
     public function findBySlug(string $slug): ?Achievement;
 }
