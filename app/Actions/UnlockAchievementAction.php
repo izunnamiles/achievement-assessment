@@ -21,7 +21,7 @@ class UnlockAchievementAction
 
         $unlocked = $this->userAchievements->unlock($user, $achievement);
 
-        event(new AchievementUnlocked($user, $achievement));
+        event(new AchievementUnlocked($achievement->name, $user));
 
         return $unlocked;
     }
