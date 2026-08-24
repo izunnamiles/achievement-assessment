@@ -27,6 +27,7 @@ class PurchaseController extends Controller
         $purchase = $recordPurchase->execute($request->user(), $product, $validated['quantity'] ?? 1);
 
         return response()->json([
+            'message' => 'Purchase recorded successfully.',
             'data' => $purchase->load('product'),
         ], 201);
     }
