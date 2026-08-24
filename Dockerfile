@@ -58,6 +58,11 @@ RUN apk add --no-cache \
 
 WORKDIR /var/www/html
 
+# Composer CLI, so the entrypoint can (re)install dependencies at container
+# start - the compose bind mount overlays whatever was installed here at
+# build time with the host's working tree.
+COPY --from=vendor /usr/bin/composer /usr/bin/composer
+
 COPY --from=vendor /app ./
 
 RUN addgroup -g 1000 www && adduser -G www -g www -s /bin/sh -D www \

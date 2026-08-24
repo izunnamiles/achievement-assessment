@@ -9,8 +9,11 @@ services:
       - "8000:8080"
     volumes:
       - .:/var/www/html
-    env_file:
-      - .env
+    # No env_file: .env is already bind-mounted into the container, so
+    # Laravel's own Dotenv loader reads it at boot, same as on the host.
+    # Exporting it as real container env vars too would make PHP's SAPI
+    # pre-populate $_SERVER with it, which then silently outranks test-time
+    # overrides in phpunit.xml (see phpunit.xml's <php> block for details).
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
@@ -25,8 +28,6 @@ services:
     command: php artisan queue:work --tries=3 --backoff=5
     volumes:
       - .:/var/www/html
-    env_file:
-      - .env
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
