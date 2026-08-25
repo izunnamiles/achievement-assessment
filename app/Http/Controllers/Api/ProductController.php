@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Contracts\Repositories\ProductRepositoryInterface;
 use App\Http\Controllers\Controller;
+use App\Http\Resources\ProductResource;
 use App\Models\Product;
 use Illuminate\Http\JsonResponse;
 
@@ -13,7 +14,7 @@ class ProductController extends Controller
     {
         return response()->json([
             'message' => 'Products retrieved successfully.',
-            'data' => $products->all(),
+            'data' => ProductResource::collection($products->all()),
         ]);
     }
 
@@ -21,7 +22,7 @@ class ProductController extends Controller
     {
         return response()->json([
             'message' => 'Product retrieved successfully.',
-            'data' => $product,
+            'data' => new ProductResource($product),
         ]);
     }
 }

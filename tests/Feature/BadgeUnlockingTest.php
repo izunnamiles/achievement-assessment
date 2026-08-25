@@ -2,38 +2,14 @@
 
 use App\Actions\RecordPurchaseAction;
 use App\Contracts\PaymentGatewayInterface;
-use App\Enums\AchievementType;
+use App\Enums\PayoutStatus;
 use App\Events\BadgeUnlocked;
-use App\Models\Achievement;
-use App\Models\Badge;
+use App\Models\BankAccount;
+use App\Models\Payout;
 use App\Models\Product;
 use App\Models\SystemSetting;
 use App\Models\User;
 use Illuminate\Support\Facades\Event;
-
-beforeEach(function () {
-    Achievement::factory()->create([
-        'name' => 'First Purchase',
-        'slug' => 'first-purchase',
-        'type' => AchievementType::Purchases,
-        'threshold' => 1,
-    ]);
-
-    Achievement::factory()->create([
-        'name' => '5 Purchases',
-        'slug' => '5-purchases',
-        'type' => AchievementType::Purchases,
-        'threshold' => 5,
-    ]);
-
-    Badge::factory()->create([
-        'name' => 'Silver Achiever',
-        'slug' => 'silver-achiever',
-        'threshold' => 2,
-    ]);
-
-    SystemSetting::query()->create(['key' => 'badge_reward', 'value' => '300']);
-});
 
 function unlockBothAchievementsFor(User $user): void
 {
@@ -50,7 +26,7 @@ test('a user unlocks a badge once they cross its achievement threshold', functio
 
     unlockBothAchievementsFor($user);
 
-    expect($user->badges()->where('slug', 'silver-achiever')->exists())->toBeTrue();
+    expect($user->badges()->where('slug', 'bronze-achiever')->exists())->toBeTrue();
 });
 
 test('a badge is never unlocked twice for the same user', function () {
@@ -58,7 +34,7 @@ test('a badge is never unlocked twice for the same user', function () {
 
     unlockBothAchievementsFor($user);
 
-    expect($user->badges()->where('slug', 'silver-achiever')->count())->toBe(1);
+    expect($user->badges()->where('slug', 'bronze-achiever')->count())->toBe(1);
 });
 
 test('unlocking a badge dispatches BadgeUnlocked with the badge name and the user', function () {
@@ -70,20 +46,34 @@ test('unlocking a badge dispatches BadgeUnlocked with the badge name and the use
 
     Event::assertDispatched(
         BadgeUnlocked::class,
-        fn (BadgeUnlocked $event) => $event->badge_name === 'Silver Achiever' && $event->user->is($user),
+        fn (BadgeUnlocked $event) => $event->badge_name === 'Bronze Achiever' && $event->user->is($user),
     );
 });
 
 test('unlocking a badge triggers a payout for the configured reward amount', function () {
     $this->mock(PaymentGatewayInterface::class)
         ->shouldReceive('payout')
-        ->once()
-        ->withArgs(fn (User $user, int $amount, string $reason) => $amount === 300 && str_contains($reason, 'Silver Achiever'))
+        ->twice()
+        ->withArgs(fn (User $user, int $amount, string $reason, string $reference) => $amount === 300 && str_starts_with($reason, 'Badge reward: '))
         ->andReturn(true);
+
+    $user = User::factory()->create();
+    BankAccount::factory()->create(['user_id' => $user->id, 'paystack_recipient_code' => 'RCP_123']);
+
+    unlockBothAchievementsFor($user);
+});
+
+test('a badge unlock creates a pending payout that stays pending without a linked bank account', function () {
+    $this->mock(PaymentGatewayInterface::class)->shouldNotReceive('payout');
 
     $user = User::factory()->create();
 
     unlockBothAchievementsFor($user);
+
+    $payout = Payout::query()->where('user_id', $user->id)->where('reason', 'Badge reward: First Steps')->first();
+
+    expect($payout)->not->toBeNull()
+        ->and($payout->status)->toBe(PayoutStatus::Pending);
 });
 
 test('no payout is attempted when the reward amount setting is missing', function () {
@@ -94,4 +84,6 @@ test('no payout is attempted when the reward amount setting is missing', functio
     $user = User::factory()->create();
 
     unlockBothAchievementsFor($user);
+
+    expect(Payout::query()->where('user_id', $user->id)->exists())->toBeFalse();
 });

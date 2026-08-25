@@ -56,8 +56,7 @@ class User extends Authenticatable implements JWTSubject
     public function achievements(): BelongsToMany
     {
         return $this->belongsToMany(Achievement::class, 'user_achievements')
-            ->withPivot('unlocked_at')
-            ->withTimestamps();
+            ->withPivot('unlocked_at');
     }
 
     public function badges(): BelongsToMany

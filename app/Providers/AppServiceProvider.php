@@ -6,6 +6,7 @@ use App\Contracts\PaymentGatewayInterface;
 use App\Contracts\Repositories\AchievementRepositoryInterface;
 use App\Contracts\Repositories\BadgeRepositoryInterface;
 use App\Contracts\Repositories\BankAccountRepositoryInterface;
+use App\Contracts\Repositories\PayoutRepositoryInterface;
 use App\Contracts\Repositories\ProductRepositoryInterface;
 use App\Contracts\Repositories\PurchaseRepositoryInterface;
 use App\Contracts\Repositories\SystemSettingRepositoryInterface;
@@ -14,6 +15,7 @@ use App\Contracts\Repositories\UserBadgeRepositoryInterface;
 use App\Repositories\AchievementRepository;
 use App\Repositories\BadgeRepository;
 use App\Repositories\BankAccountRepository;
+use App\Repositories\PayoutRepository;
 use App\Repositories\ProductRepository;
 use App\Repositories\PurchaseRepository;
 use App\Repositories\SystemSettingRepository;
@@ -37,6 +39,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(UserBadgeRepositoryInterface::class, UserBadgeRepository::class);
         $this->app->bind(SystemSettingRepositoryInterface::class, SystemSettingRepository::class);
         $this->app->bind(BankAccountRepositoryInterface::class, BankAccountRepository::class);
+        $this->app->bind(PayoutRepositoryInterface::class, PayoutRepository::class);
         $this->app->bind(PaymentGatewayInterface::class, PaystackService::class);
     }
 

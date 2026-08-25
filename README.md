@@ -1,58 +1,83 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Customer Achievement Assessment API
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+A Laravel 13 / PHP 8.3 API that gamifies a simple purchase flow: users buy products, unlock **achievements** based on purchase milestones, unlock **badges** based on how many achievements they've earned, and get paid a cash reward via **Paystack** when a badge unlocks.
 
-## About Laravel
+## Design choices
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- **Repository pattern** — every model has a `Contracts\Repositories\*Interface` bound to a `Repositories\*` implementation in `AppServiceProvider`, keeping controllers/actions decoupled from Eloquent.
+- **Actions** — single-purpose classes in `app/Actions` (`RecordPurchaseAction`, `UnlockAchievementAction`, `UnlockBadgeAction`, `PayoutAction`, `BankAccountAction`) encapsulate each unit of business logic. `UnlockAchievementAction`/`UnlockBadgeAction` each pair a "check every eligible one for this user" method with a "unlock this one" method; `PayoutAction` pairs "attempt" (send via the gateway) with "verify" (reconcile against Paystack).
+- **Events & queued listeners** — achievement/badge unlocking and the Paystack payout run as `ShouldQueue` listeners off the request cycle, processed by a dedicated `worker` container/process.
+- **Race-safety** — unlock actions and the payout listener wrap their check-then-act logic in `Cache::lock()`, backed by unique DB constraints on `(user_id, achievement_id)` and `(user_id, badge_id)` as a second line of defense against concurrent queue workers double-unlocking. Payouts get the same protection a different way: `firstOrCreatePending` is keyed on `(user_id, reason)`, so a retried/redelivered queue job reuses the existing payout instead of creating (and paying) a second one.
+- **Payout lifecycle** — a badge unlock creates a `Payout` (`Pending` → `Paid`/`Failed`). It's reconciled two ways: a Paystack webhook (`POST /api/paystack/webhook`, authenticated via HMAC-SHA512 signature verification instead of a JWT) updates it as soon as Paystack calls back, and the `php artisan payouts:verify` console command polls Paystack directly for any payout still `Pending` — useful as a fallback if a webhook delivery is missed. Linking a bank account after a payout was stuck pending (no `paystack_recipient_code` yet) automatically retries it via `BankAccountAction`.
+- **Payment gateway abstraction** — `PaymentGatewayInterface` / `PaystackService` isolates the Paystack HTTP calls so the gateway can be swapped or mocked in tests.
+- **API Resources** — `app/Http/Resources` (`ProductResource`, `PurchaseResource`, `AchievementResource`, `UserAchievementResource`) shape every JSON response by hand, so internal IDs and foreign keys are never accidentally exposed.
+- **UUID route keys** — `User`, `Product`, and `Purchase` use a `HasUuid` trait so they're referenced by UUID (not incrementing ID, so as not to expose primary keys) in URLs and API responses.
+- **JWT auth** — `tymon/jwt-auth` provides the `api` guard; no session-based auth.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Tech stack
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+PHP 8.3 · Laravel 13 · MySQL · database-backed queues · `tymon/jwt-auth` · Pest (on PHPUnit) · Docker (nginx + php-fpm).
 
-## Learning Laravel
+## Setup
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+### Option A — Docker
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+cp .env.example .env
+docker compose up --build
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+- `api` — nginx + php-fpm, served at http://localhost:8000
+- `worker` — runs `php artisan queue:work`
 
-## Contributing
+`docker-compose.yml` bind-mounts the project root over `/var/www/html`, which hides whatever `vendor/` the image built during `docker build` — so the `api` container's entrypoint runs `composer install` itself on every start (using the `composer` binary baked into the image), generates `APP_KEY`/`JWT_SECRET` if `.env` doesn't have them yet, then runs `php artisan migrate --seed --force`. All of that writes back to the bind-mounted host directory just like any other change made from inside the container, so **the host never needs its own PHP, Composer, or manual `key:generate`/`jwt:secret` calls** — the very first `docker compose up --build` sets everything up for you. `worker` waits for `api` to finish this before starting `queue:work`, rather than racing it to do the same setup.
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+> If you'd rather have `vendor/` (and your IDE's autocomplete) ready *before* the container finishes booting, you can still run `composer install` on the host yourself beforehand — it's optional now, not required.
 
-## Code of Conduct
+> `.env` isn't passed into the containers as env vars: Laravel just reads the bind-mounted file directly, same as running locally. This was done to make it easier to run tests on the container.
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+> The compose file doesn't ship a database container. Point `DB_HOST` in `.env` at your own MySQL instance (e.g. `host.docker.internal` for one running on your host machine) — the database is expected to already exist and be referenced in `.env`.
 
-## Security Vulnerabilities
+### Option B — Local
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```bash
+composer install
+cp .env.example .env
+php artisan key:generate
+php artisan jwt:secret
+php artisan migrate --seed
+php artisan serve
+```
 
-## License
+Set `PAYSTACK_SECRET_KEY` / `PAYSTACK_BASE_URL` in `.env` if you want badge payouts to actually call Paystack.
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+A seeded test user is available: `test@example.com` / `password@123`.
+
+## API
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| POST | `/api/auth/login` | – | Log in, returns JWT |
+| POST | `/api/auth/logout` | ✓ | Invalidate token |
+| GET | `/api/products` | ✓ | List products |
+| GET | `/api/products/{product}` | ✓ | Show a product |
+| POST | `/api/purchases` | ✓ | Buy a product (`product_id`, `quantity`) |
+| GET | `/api/achievements` | ✓ | List the user's unlocked achievements |
+| POST | `/api/bank-account` | ✓ | Link a payout bank account (retries any pending payout) |
+| POST | `/api/paystack/webhook` | – | Paystack payout status callback (HMAC-signed, not JWT-authenticated) |
+| GET | `/users/{user}/achievements` | – | Web view of a user's achievement progress |
+
+Run `php artisan payouts:verify` (manually or on a cron) to poll Paystack for any payout still `Pending`, as a fallback for a missed webhook delivery.
+
+## Testing
+
+```bash
+composer test
+# or
+php artisan test
+
+# or, inside the running api container:
+docker compose exec api php artisan test
+```
+
+Tests run against an in-memory SQLite DB with `QUEUE_CONNECTION=sync`, so queued listeners execute inline — no worker needed while testing. Feature tests (`tests/Feature`) boot the app with `RefreshDatabase`; unit tests (`tests/Unit`) exercise actions/listeners/services in isolation without touching the DB.

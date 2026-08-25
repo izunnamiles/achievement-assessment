@@ -2,26 +2,8 @@
 
 use App\Actions\RecordPurchaseAction;
 use App\Contracts\Repositories\ProductRepositoryInterface;
-use App\Enums\AchievementType;
-use App\Models\Achievement;
 use App\Models\Product;
 use App\Models\User;
-
-beforeEach(function () {
-    Achievement::factory()->create([
-        'name' => 'First Purchase',
-        'slug' => 'first-purchase',
-        'type' => AchievementType::Purchases,
-        'threshold' => 1,
-    ]);
-
-    Achievement::factory()->create([
-        'name' => '5 Purchases',
-        'slug' => '5-purchases',
-        'type' => AchievementType::Purchases,
-        'threshold' => 5,
-    ]);
-});
 
 test('a user unlocks the first purchase achievement on their first purchase', function () {
     $user = User::factory()->create();

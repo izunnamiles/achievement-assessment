@@ -9,6 +9,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 #[Guarded(['id'])]
 class UserAchievement extends Model
 {
+    /**
+     * No created_at/updated_at columns - unlocked_at is this row's one and
+     * only timestamp, since it's written once and never updated.
+     */
+    public $timestamps = false;
+
     protected function casts(): array
     {
         return [

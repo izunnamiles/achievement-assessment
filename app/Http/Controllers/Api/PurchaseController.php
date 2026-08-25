@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Actions\RecordPurchaseAction;
 use App\Contracts\Repositories\ProductRepositoryInterface;
 use App\Http\Controllers\Controller;
+use App\Http\Resources\PurchaseResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -28,7 +29,7 @@ class PurchaseController extends Controller
 
         return response()->json([
             'message' => 'Purchase recorded successfully.',
-            'data' => $purchase->load('product'),
+            'data' => new PurchaseResource($purchase->load('product')),
         ], 201);
     }
 }

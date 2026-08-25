@@ -2,6 +2,7 @@
 
 use App\Contracts\Repositories\BankAccountRepositoryInterface;
 use App\Exceptions\PaystackRecipientCreationException;
+use App\Exceptions\PaystackVerificationException;
 use App\Services\Payments\PaystackService;
 use Illuminate\Support\Facades\Http;
 
@@ -52,9 +53,11 @@ it('pays out to the recipient on file and reports success', function () {
 
     $paystack = new PaystackService($bankAccounts);
 
-    expect($paystack->payout($user, 300, 'Badge reward: Silver Achiever'))->toBeTrue();
+    expect($paystack->payout($user, 300, 'Badge reward: Silver Achiever', 'ref-123'))->toBeTrue();
 
-    Http::assertSent(fn ($request) => $request['recipient'] === 'RCP_123' && $request['amount'] === 30000);
+    Http::assertSent(fn ($request) => $request['recipient'] === 'RCP_123'
+        && $request['amount'] === 30000
+        && $request['reference'] === 'ref-123');
 });
 
 it('skips the payout when the user has no bank account on file', function () {
@@ -67,7 +70,7 @@ it('skips the payout when the user has no bank account on file', function () {
 
     $paystack = new PaystackService($bankAccounts);
 
-    expect($paystack->payout($user, 300, 'Badge reward: Silver Achiever'))->toBeFalse();
+    expect($paystack->payout($user, 300, 'Badge reward: Silver Achiever', 'ref-123'))->toBeFalse();
 
     Http::assertNothingSent();
 });
@@ -85,5 +88,31 @@ it('reports failure when Paystack rejects the transfer', function () {
 
     $paystack = new PaystackService($bankAccounts);
 
-    expect($paystack->payout($user, 300, 'Badge reward: Silver Achiever'))->toBeFalse();
+    expect($paystack->payout($user, 300, 'Badge reward: Silver Achiever', 'ref-123'))->toBeFalse();
+});
+
+it('verifies a transfer and returns its status', function () {
+    Http::fake([
+        '*/transfer/verify/*' => Http::response([
+            'status' => true,
+            'data' => ['status' => 'success'],
+        ], 200),
+    ]);
+
+    $paystack = new PaystackService(Mockery::mock(BankAccountRepositoryInterface::class));
+
+    expect($paystack->verifyTransfer('ref-123'))->toBe('success');
+
+    Http::assertSent(fn ($request) => str_contains($request->url(), '/transfer/verify/ref-123'));
+});
+
+it('throws when Paystack cannot verify the transfer', function () {
+    Http::fake([
+        '*/transfer/verify/*' => Http::response(['status' => false], 404),
+    ]);
+
+    $paystack = new PaystackService(Mockery::mock(BankAccountRepositoryInterface::class));
+
+    expect(fn () => $paystack->verifyTransfer('ref-123'))
+        ->toThrow(PaystackVerificationException::class);
 });

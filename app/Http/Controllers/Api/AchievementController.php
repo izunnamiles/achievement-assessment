@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Contracts\Repositories\UserAchievementRepositoryInterface;
 use App\Http\Controllers\Controller;
+use App\Http\Resources\UserAchievementResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -13,7 +14,7 @@ class AchievementController extends Controller
     {
         return response()->json([
             'message' => 'Achievements retrieved successfully.',
-            'data' => $userAchievements->unlockedForUser($request->user()),
+            'data' => UserAchievementResource::collection($userAchievements->unlockedForUser($request->user())),
         ]);
     }
 }

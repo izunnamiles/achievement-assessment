@@ -1,26 +1,13 @@
 <?php
 
 use App\Actions\RecordPurchaseAction;
-use App\Enums\AchievementType;
-use App\Models\Achievement;
 use App\Models\Product;
 use App\Models\User;
 
-beforeEach(function () {
-    Achievement::factory()->create([
-        'name' => 'First Purchase',
-        'slug' => 'first-purchase',
-        'type' => AchievementType::Purchases,
-        'threshold' => 1,
-    ]);
-
-    Achievement::factory()->create([
-        'name' => '5 Purchases',
-        'slug' => '5-purchases',
-        'type' => AchievementType::Purchases,
-        'threshold' => 5,
-    ]);
-});
+// The 'First Purchase' (threshold 1) / '5 Purchases' (threshold 5) achievements
+// and the 10-tier badge ladder ('First Steps' threshold 1, 'Bronze Achiever'
+// threshold 2, 'Silver Achiever' threshold 3, ...) these tests exercise are
+// all seeded directly by their respective migrations, so they already exist.
 
 test('it lists unlocked and next-available achievements for a user with partial progress', function () {
     $user = User::factory()->create();
@@ -33,6 +20,9 @@ test('it lists unlocked and next-available achievements for a user with partial 
     $response->assertOk()->assertExactJson([
         'unlocked_achievements' => ['First Purchase'],
         'next_available_achievements' => ['5 Purchases'],
+        'current_badge' => 'First Steps',
+        'next_badge' => 'Bronze Achiever',
+        'remaining_to_unlock_next_badge' => 1,
     ]);
 });
 
@@ -50,6 +40,9 @@ test('next_available_achievements is empty once every achievement in the group i
     $response->assertOk()->assertExactJson([
         'unlocked_achievements' => ['First Purchase', '5 Purchases'],
         'next_available_achievements' => [],
+        'current_badge' => 'Bronze Achiever',
+        'next_badge' => 'Silver Achiever',
+        'remaining_to_unlock_next_badge' => 1,
     ]);
 });
 
@@ -61,6 +54,9 @@ test('a user with no purchases has nothing unlocked and the lowest-threshold ach
     $response->assertOk()->assertExactJson([
         'unlocked_achievements' => [],
         'next_available_achievements' => ['First Purchase'],
+        'current_badge' => '',
+        'next_badge' => 'First Steps',
+        'remaining_to_unlock_next_badge' => 1,
     ]);
 });
 

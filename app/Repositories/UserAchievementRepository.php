@@ -35,7 +35,8 @@ class UserAchievementRepository implements UserAchievementRepositoryInterface
     public function unlockedForUser(User $user): Collection
     {
         return UserAchievement::query()
-            ->with('achievement')
+            ->select('id', 'achievement_id', 'unlocked_at')
+            ->with('achievement:id,name,slug,description,type,threshold')
             ->where('user_id', $user->id)
             ->get();
     }

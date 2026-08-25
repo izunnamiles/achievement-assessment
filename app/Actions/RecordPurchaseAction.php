@@ -10,11 +10,14 @@ use App\Models\Product;
 use App\Models\Purchase;
 use App\Models\User;
 
+/**
+ * Records a purchase, decrementing stock and dispatching PurchaseMade.
+ */
 class RecordPurchaseAction
 {
     public function __construct(
         private readonly PurchaseRepositoryInterface $purchases,
-        private readonly ProductRepositoryInterface $products,
+        private readonly ProductRepositoryInterface $products
     ) {}
 
     public function execute(User $user, Product $product, int $quantity = 1): Purchase

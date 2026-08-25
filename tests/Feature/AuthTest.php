@@ -13,7 +13,7 @@ test('a user can log in with valid credentials and receive a jwt', function () {
     ]);
 
     $response->assertOk()
-        ->assertJsonStructure(['access_token', 'token_type', 'expires_in']);
+        ->assertJsonStructure(['message', 'access_token', 'expires_in']);
 });
 
 test('a user cannot log in with invalid credentials', function () {

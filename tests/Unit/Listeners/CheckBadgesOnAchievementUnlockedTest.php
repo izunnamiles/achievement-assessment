@@ -1,24 +1,24 @@
 <?php
 
-use App\Actions\CheckBadgesAction;
+use App\Actions\UnlockBadgeAction;
 use App\Events\AchievementUnlocked;
 use App\Listeners\CheckBadgesOnAchievementUnlocked;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Events\CallQueuedListener;
 use Illuminate\Support\Facades\Queue;
 
-it('delegates to CheckBadgesAction for the user', function () {
+it('delegates to UnlockBadgeAction for the user', function () {
     $user = makeUser(['id' => 1]);
     $event = new AchievementUnlocked('First Purchase', $user);
 
-    $checkBadges = Mockery::mock(CheckBadgesAction::class);
-    $checkBadges->shouldReceive('execute')->once()->with($user);
+    $unlockBadge = Mockery::mock(UnlockBadgeAction::class);
+    $unlockBadge->shouldReceive('unlockEligibleForUser')->once()->with($user);
 
-    (new CheckBadgesOnAchievementUnlocked($checkBadges))->handle($event);
+    (new CheckBadgesOnAchievementUnlocked($unlockBadge))->handle($event);
 });
 
 it('implements ShouldQueue', function () {
-    expect(new CheckBadgesOnAchievementUnlocked(Mockery::mock(CheckBadgesAction::class)))
+    expect(new CheckBadgesOnAchievementUnlocked(Mockery::mock(UnlockBadgeAction::class)))
         ->toBeInstanceOf(ShouldQueue::class);
 });
 

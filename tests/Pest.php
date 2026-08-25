@@ -94,3 +94,10 @@ function makeBankAccount(array $attributes = []): \App\Models\BankAccount
 {
     return (new \App\Models\BankAccount)->forceFill($attributes);
 }
+
+function makePayout(array $attributes = []): \App\Models\Payout
+{
+    return (new \App\Models\Payout)->forceFill(array_merge([
+        'status' => \App\Enums\PayoutStatus::Pending,
+    ], $attributes));
+}

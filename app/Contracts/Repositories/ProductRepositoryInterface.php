@@ -3,9 +3,15 @@
 namespace App\Contracts\Repositories;
 
 use App\Models\Product;
+use Illuminate\Support\Collection;
 
 interface ProductRepositoryInterface
 {
+    /**
+     * @return Collection<int, Product>
+     */
+    public function all(): Collection;
+
     public function findByUuid(string $uuid): ?Product;
 
     /**

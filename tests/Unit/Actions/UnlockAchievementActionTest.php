@@ -1,9 +1,13 @@
 <?php
 
 use App\Actions\UnlockAchievementAction;
+use App\Contracts\Repositories\AchievementRepositoryInterface;
+use App\Contracts\Repositories\PurchaseRepositoryInterface;
 use App\Contracts\Repositories\UserAchievementRepositoryInterface;
+use App\Enums\AchievementType;
 use App\Events\AchievementUnlocked;
 use App\Models\UserAchievement;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Event;
 
 beforeEach(fn () => Event::fake());
@@ -17,7 +21,13 @@ it('unlocks the achievement through the repository and dispatches AchievementUnl
     $userAchievements->shouldReceive('hasUnlocked')->once()->with($user, $achievement)->andReturn(false);
     $userAchievements->shouldReceive('unlock')->once()->with($user, $achievement)->andReturn($userAchievement);
 
-    $result = (new UnlockAchievementAction($userAchievements))->execute($user, $achievement);
+    $action = new UnlockAchievementAction(
+        Mockery::mock(PurchaseRepositoryInterface::class),
+        Mockery::mock(AchievementRepositoryInterface::class),
+        $userAchievements,
+    );
+
+    $result = $action->unlock($user, $achievement);
 
     expect($result)->toBe($userAchievement);
 
@@ -35,9 +45,53 @@ it('does nothing when the user already has the achievement', function () {
     $userAchievements->shouldReceive('hasUnlocked')->once()->andReturn(true);
     $userAchievements->shouldNotReceive('unlock');
 
-    $result = (new UnlockAchievementAction($userAchievements))->execute($user, $achievement);
+    $action = new UnlockAchievementAction(
+        Mockery::mock(PurchaseRepositoryInterface::class),
+        Mockery::mock(AchievementRepositoryInterface::class),
+        $userAchievements,
+    );
+
+    $result = $action->unlock($user, $achievement);
 
     expect($result)->toBeNull();
 
     Event::assertNotDispatched(AchievementUnlocked::class);
+});
+
+it('unlocks every achievement whose threshold the purchase count has reached', function () {
+    $user = makeUser(['id' => 1]);
+    $first = makeAchievement(['id' => 1, 'threshold' => 1]);
+    $five = makeAchievement(['id' => 2, 'threshold' => 5]);
+    $ten = makeAchievement(['id' => 3, 'threshold' => 10]);
+
+    $purchases = Mockery::mock(PurchaseRepositoryInterface::class);
+    $purchases->shouldReceive('countForUser')->once()->with($user)->andReturn(5);
+
+    $achievements = Mockery::mock(AchievementRepositoryInterface::class);
+    $achievements->shouldReceive('allByType')
+        ->once()
+        ->with(AchievementType::Purchases)
+        ->andReturn(new Collection([$first, $five, $ten]));
+
+    $userAchievements = Mockery::mock(UserAchievementRepositoryInterface::class);
+    $userAchievements->shouldReceive('hasUnlocked')->twice()->andReturn(true);
+
+    (new UnlockAchievementAction($purchases, $achievements, $userAchievements))->unlockEligibleForUser($user);
+});
+
+it('unlocks no achievements when the purchase count reaches no threshold', function () {
+    $user = makeUser(['id' => 1]);
+    $first = makeAchievement(['id' => 1, 'threshold' => 1]);
+
+    $purchases = Mockery::mock(PurchaseRepositoryInterface::class);
+    $purchases->shouldReceive('countForUser')->once()->andReturn(0);
+
+    $achievements = Mockery::mock(AchievementRepositoryInterface::class);
+    $achievements->shouldReceive('allByType')->once()->andReturn(new Collection([$first]));
+
+    $userAchievements = Mockery::mock(UserAchievementRepositoryInterface::class);
+    $userAchievements->shouldNotReceive('hasUnlocked');
+    $userAchievements->shouldNotReceive('unlock');
+
+    (new UnlockAchievementAction($purchases, $achievements, $userAchievements))->unlockEligibleForUser($user);
 });
