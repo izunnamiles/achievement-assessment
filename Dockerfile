@@ -74,7 +74,8 @@ RUN addgroup -g 1000 www && adduser -G www -g www -s /bin/sh -D www \
 
 COPY docker/nginx/default.conf /etc/nginx/http.d/default.conf
 COPY docker/php/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+COPY docker/php/setup.sh /usr/local/bin/setup.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/setup.sh
 
 USER www
 

@@ -1,21 +1,24 @@
 #!/bin/bash
 set -e
 
-# docker-compose no longer sets APP_ENV as a container env var (see
-# docker-compose.yml) - .env is only read by Laravel itself now, so pull
-# APP_ENV from that file directly for this shell-level check.
-APP_ENV=$(grep -m1 '^APP_ENV=' .env | cut -d '=' -f2-)
+# api and worker share the same bind-mounted project directory and both boot
+# from this entrypoint. Cross-container file locking (flock on a shared bind
+# mount) turned out not to reliably serialize them on Docker Desktop, so
+# instead only api runs first-boot setup (composer install, .env writes,
+# migrations); worker just waits for api's "done" marker rather than racing
+# on the same work itself.
+READY_MARKER=/var/www/html/storage/framework/cache/data/.setup-complete
 
-# Caching config/routes bakes in whatever .env this container started with,
-# which then silently overrides phpunit.xml's test-env values (and hides new
-# routes) on any later local run against the same bind-mounted volume - only
-# do it for real deploys.
-if [ "$APP_ENV" = "production" ]; then
-    php artisan config:cache
-    php artisan route:cache
+if [ "$CONTAINER_ROLE" = "worker" ]; then
+    echo "Waiting for the api container to finish first-boot setup..."
+    until [ -f "$READY_MARKER" ]; do
+        sleep 1
+    done
+else
+    rm -f "$READY_MARKER"
+    /usr/local/bin/setup.sh
+    touch "$READY_MARKER"
 fi
-
-php artisan migrate --seed --force
 
 # Run php-fpm in the background; nginx (the CMD) becomes the container's foreground process.
 php-fpm -D
