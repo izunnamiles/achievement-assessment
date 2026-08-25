@@ -20,10 +20,33 @@ PHP 8.3 · Laravel 13 · MySQL · database-backed queues · `tymon/jwt-auth` · 
 
 ## Setup
 
-### Option A — Docker
+```bash
+git clone https://github.com/izunnamiles/achievement-assessment.git
+cd achievement-assessment
+```
+
+### Database
+
+Neither setup option below ships or creates a database server — you need a MySQL instance reachable from the app, with the database itself already created. Copy `.env.example` to `.env` and point the `DB_*` variables at it:
 
 ```bash
 cp .env.example .env
+```
+
+```dotenv
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1        # or host.docker.internal (see Option A), or a container/service name
+DB_PORT=3306
+DB_DATABASE=laravel      # must already exist - migrations create tables, not the database
+DB_USERNAME=laravel
+DB_PASSWORD=secret
+```
+
+Migrations (run automatically below) create the schema; they don't create the database itself.
+
+### Option A — Docker
+
+```bash
 docker compose up --build
 ```
 
@@ -36,13 +59,12 @@ docker compose up --build
 
 > `.env` isn't passed into the containers as env vars: Laravel just reads the bind-mounted file directly, same as running locally. This was done to make it easier to run tests on the container.
 
-> The compose file doesn't ship a database container. Point `DB_HOST` in `.env` at your own MySQL instance (e.g. `host.docker.internal` for one running on your host machine) — the database is expected to already exist and be referenced in `.env`.
+> The compose file doesn't ship a database container. Point `DB_HOST` in `.env` at your own MySQL instance (e.g. `host.docker.internal` for one running on your host machine) — see [Database](#database) above for the rest of the `DB_*` values.
 
 ### Option B — Local
 
 ```bash
 composer install
-cp .env.example .env
 php artisan key:generate
 php artisan jwt:secret
 php artisan migrate --seed
@@ -71,6 +93,8 @@ Run `php artisan payouts:verify` (manually or on a cron) to poll Paystack for an
 
 ## Testing
 
+To run tests, use the following:
+
 ```bash
 composer test
 # or
@@ -80,4 +104,4 @@ php artisan test
 docker compose exec api php artisan test
 ```
 
-Tests run against an in-memory SQLite DB with `QUEUE_CONNECTION=sync`, so queued listeners execute inline — no worker needed while testing. Feature tests (`tests/Feature`) boot the app with `RefreshDatabase`; unit tests (`tests/Unit`) exercise actions/listeners/services in isolation without touching the DB.
+Tests run against an in-memory SQLite DB with `QUEUE_CONNECTION=sync`, so queued listeners execute inline — no worker needed while testing.
