@@ -1,9 +1,11 @@
 <?php
 
 use App\Actions\UnlockBadgeAction;
+use App\Contracts\Repositories\AuditLogRepositoryInterface;
 use App\Contracts\Repositories\BadgeRepositoryInterface;
 use App\Contracts\Repositories\UserAchievementRepositoryInterface;
 use App\Contracts\Repositories\UserBadgeRepositoryInterface;
+use App\Enums\AuditType;
 use App\Events\BadgeUnlocked;
 use App\Models\UserBadge;
 use Illuminate\Support\Collection;
@@ -13,17 +15,26 @@ beforeEach(fn () => Event::fake());
 
 it('unlocks the badge through the repository and dispatches BadgeUnlocked', function () {
     $user = makeUser(['id' => 1]);
-    $badge = makeBadge(['id' => 1, 'name' => 'Silver Achiever']);
+    $badge = makeBadge(['id' => 1, 'name' => 'Silver Achiever', 'slug' => 'silver-achiever']);
     $userBadge = (new UserBadge)->forceFill(['id' => 1, 'user_id' => 1, 'badge_id' => 1]);
 
     $userBadges = Mockery::mock(UserBadgeRepositoryInterface::class);
     $userBadges->shouldReceive('hasUnlocked')->once()->with($user, $badge)->andReturn(false);
     $userBadges->shouldReceive('unlock')->once()->with($user, $badge)->andReturn($userBadge);
 
+    $auditLogs = Mockery::mock(AuditLogRepositoryInterface::class);
+    $auditLogs->shouldReceive('record')->once()->with(
+        $user,
+        AuditType::BadgeUnlocked,
+        'Unlocked badge: Silver Achiever',
+        ['badge_id' => 1, 'slug' => 'silver-achiever'],
+    );
+
     $action = new UnlockBadgeAction(
         Mockery::mock(UserAchievementRepositoryInterface::class),
         Mockery::mock(BadgeRepositoryInterface::class),
         $userBadges,
+        $auditLogs,
     );
 
     $result = $action->unlock($user, $badge);
@@ -44,10 +55,14 @@ it('does nothing when the user already has the badge', function () {
     $userBadges->shouldReceive('hasUnlocked')->once()->andReturn(true);
     $userBadges->shouldNotReceive('unlock');
 
+    $auditLogs = Mockery::mock(AuditLogRepositoryInterface::class);
+    $auditLogs->shouldNotReceive('record');
+
     $action = new UnlockBadgeAction(
         Mockery::mock(UserAchievementRepositoryInterface::class),
         Mockery::mock(BadgeRepositoryInterface::class),
         $userBadges,
+        $auditLogs,
     );
 
     $result = $action->unlock($user, $badge);
@@ -72,7 +87,10 @@ it('unlocks every badge whose threshold the achievement count has reached', func
     $userBadges = Mockery::mock(UserBadgeRepositoryInterface::class);
     $userBadges->shouldReceive('hasUnlocked')->twice()->andReturn(true);
 
-    (new UnlockBadgeAction($userAchievements, $badges, $userBadges))->unlockEligibleForUser($user);
+    $auditLogs = Mockery::mock(AuditLogRepositoryInterface::class);
+    $auditLogs->shouldNotReceive('record');
+
+    (new UnlockBadgeAction($userAchievements, $badges, $userBadges, $auditLogs))->unlockEligibleForUser($user);
 });
 
 it('unlocks no badges when the achievement count reaches no threshold', function () {
@@ -89,5 +107,8 @@ it('unlocks no badges when the achievement count reaches no threshold', function
     $userBadges->shouldNotReceive('hasUnlocked');
     $userBadges->shouldNotReceive('unlock');
 
-    (new UnlockBadgeAction($userAchievements, $badges, $userBadges))->unlockEligibleForUser($user);
+    $auditLogs = Mockery::mock(AuditLogRepositoryInterface::class);
+    $auditLogs->shouldNotReceive('record');
+
+    (new UnlockBadgeAction($userAchievements, $badges, $userBadges, $auditLogs))->unlockEligibleForUser($user);
 });

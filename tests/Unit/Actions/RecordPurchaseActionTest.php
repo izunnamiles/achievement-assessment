@@ -1,8 +1,10 @@
 <?php
 
 use App\Actions\RecordPurchaseAction;
+use App\Contracts\Repositories\AuditLogRepositoryInterface;
 use App\Contracts\Repositories\ProductRepositoryInterface;
 use App\Contracts\Repositories\PurchaseRepositoryInterface;
+use App\Enums\AuditType;
 use App\Events\PurchaseMade;
 use App\Exceptions\InsufficientStockException;
 use Illuminate\Support\Facades\Event;
@@ -11,8 +13,8 @@ beforeEach(fn () => Event::fake());
 
 it('creates a purchase priced from the product, through the repository', function () {
     $user = makeUser(['id' => 1]);
-    $product = makeProduct(['id' => 1, 'price' => 10]);
-    $purchase = makePurchase(['id' => 1, 'user_id' => $user->id, 'product_id' => $product->id]);
+    $product = makeProduct(['id' => 1, 'price' => 10, 'name' => 'Widget']);
+    $purchase = makePurchase(['id' => 1, 'user_id' => $user->id, 'product_id' => $product->id, 'amount' => 20.0]);
 
     $products = Mockery::mock(ProductRepositoryInterface::class);
     $products->shouldReceive('decrementStock')->once()->with($product, 2)->andReturn(true);
@@ -27,7 +29,15 @@ it('creates a purchase priced from the product, through the repository', functio
         ])
         ->andReturn($purchase);
 
-    $result = (new RecordPurchaseAction($purchases, $products))->execute($user, $product, 2);
+    $auditLogs = Mockery::mock(AuditLogRepositoryInterface::class);
+    $auditLogs->shouldReceive('record')->once()->with(
+        $user,
+        AuditType::Purchase,
+        'Purchased 2 x Widget',
+        ['product_id' => $product->id, 'quantity' => 2, 'amount' => 20.0],
+    );
+
+    $result = (new RecordPurchaseAction($purchases, $products, $auditLogs))->execute($user, $product, 2);
 
     expect($result)->toBe($purchase);
 });
@@ -50,7 +60,10 @@ it('defaults to a quantity of one', function () {
         ])
         ->andReturn($purchase);
 
-    (new RecordPurchaseAction($purchases, $products))->execute($user, $product);
+    $auditLogs = Mockery::mock(AuditLogRepositoryInterface::class);
+    $auditLogs->shouldReceive('record')->once();
+
+    (new RecordPurchaseAction($purchases, $products, $auditLogs))->execute($user, $product);
 });
 
 it('dispatches a PurchaseMade event carrying the user and the recorded purchase', function () {
@@ -64,7 +77,10 @@ it('dispatches a PurchaseMade event carrying the user and the recorded purchase'
     $purchases = Mockery::mock(PurchaseRepositoryInterface::class);
     $purchases->shouldReceive('create')->once()->andReturn($purchase);
 
-    (new RecordPurchaseAction($purchases, $products))->execute($user, $product);
+    $auditLogs = Mockery::mock(AuditLogRepositoryInterface::class);
+    $auditLogs->shouldReceive('record')->once();
+
+    (new RecordPurchaseAction($purchases, $products, $auditLogs))->execute($user, $product);
 
     Event::assertDispatched(
         PurchaseMade::class,
@@ -82,7 +98,10 @@ it('throws when there is not enough stock, without touching the purchase reposit
     $purchases = Mockery::mock(PurchaseRepositoryInterface::class);
     $purchases->shouldNotReceive('create');
 
-    expect(fn () => (new RecordPurchaseAction($purchases, $products))->execute($user, $product, 3))
+    $auditLogs = Mockery::mock(AuditLogRepositoryInterface::class);
+    $auditLogs->shouldNotReceive('record');
+
+    expect(fn () => (new RecordPurchaseAction($purchases, $products, $auditLogs))->execute($user, $product, 3))
         ->toThrow(InsufficientStockException::class);
 
     Event::assertNotDispatched(PurchaseMade::class);
@@ -98,7 +117,10 @@ it('does not dispatch PurchaseMade when the repository fails to create the purch
     $purchases = Mockery::mock(PurchaseRepositoryInterface::class);
     $purchases->shouldReceive('create')->once()->andThrow(new RuntimeException('db down'));
 
-    expect(fn () => (new RecordPurchaseAction($purchases, $products))->execute($user, $product))
+    $auditLogs = Mockery::mock(AuditLogRepositoryInterface::class);
+    $auditLogs->shouldNotReceive('record');
+
+    expect(fn () => (new RecordPurchaseAction($purchases, $products, $auditLogs))->execute($user, $product))
         ->toThrow(RuntimeException::class);
 
     Event::assertNotDispatched(PurchaseMade::class);

@@ -2,8 +2,10 @@
 
 use App\Actions\BankAccountAction;
 use App\Actions\PayoutAction;
+use App\Contracts\Repositories\AuditLogRepositoryInterface;
 use App\Contracts\Repositories\BankAccountRepositoryInterface;
 use App\Contracts\Repositories\PayoutRepositoryInterface;
+use App\Enums\AuditType;
 use App\Services\Payments\PaystackService;
 use Illuminate\Support\Collection;
 
@@ -29,7 +31,15 @@ it('creates a paystack recipient, saves the bank account, and retries any pendin
     $payoutAction->shouldReceive('attempt')->once()->with($payoutOne);
     $payoutAction->shouldReceive('attempt')->once()->with($payoutTwo);
 
-    $result = (new BankAccountAction($paystack, $bankAccounts, $payouts, $payoutAction))
+    $auditLogs = Mockery::mock(AuditLogRepositoryInterface::class);
+    $auditLogs->shouldReceive('record')->once()->with(
+        $user,
+        AuditType::BankAccountLinked,
+        'Linked bank account',
+        ['bank_code' => '058', 'account_number_last_4' => '6789'],
+    );
+
+    $result = (new BankAccountAction($paystack, $bankAccounts, $payouts, $payoutAction, $auditLogs))
         ->register($user, '058', '0123456789');
 
     expect($result)->toBe($bankAccount);
@@ -51,6 +61,9 @@ it('does nothing extra when there are no pending payouts to retry', function () 
     $payoutAction = Mockery::mock(PayoutAction::class);
     $payoutAction->shouldNotReceive('attempt');
 
-    (new BankAccountAction($paystack, $bankAccounts, $payouts, $payoutAction))
+    $auditLogs = Mockery::mock(AuditLogRepositoryInterface::class);
+    $auditLogs->shouldReceive('record')->once();
+
+    (new BankAccountAction($paystack, $bankAccounts, $payouts, $payoutAction, $auditLogs))
         ->register($user, '058', '0123456789');
 });

@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Contracts\PaymentGatewayInterface;
 use App\Contracts\Repositories\AchievementRepositoryInterface;
+use App\Contracts\Repositories\AuditLogRepositoryInterface;
 use App\Contracts\Repositories\BadgeRepositoryInterface;
 use App\Contracts\Repositories\BankAccountRepositoryInterface;
 use App\Contracts\Repositories\PayoutRepositoryInterface;
@@ -13,6 +14,7 @@ use App\Contracts\Repositories\SystemSettingRepositoryInterface;
 use App\Contracts\Repositories\UserAchievementRepositoryInterface;
 use App\Contracts\Repositories\UserBadgeRepositoryInterface;
 use App\Repositories\AchievementRepository;
+use App\Repositories\AuditLogRepository;
 use App\Repositories\BadgeRepository;
 use App\Repositories\BankAccountRepository;
 use App\Repositories\PayoutRepository;
@@ -40,6 +42,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(SystemSettingRepositoryInterface::class, SystemSettingRepository::class);
         $this->app->bind(BankAccountRepositoryInterface::class, BankAccountRepository::class);
         $this->app->bind(PayoutRepositoryInterface::class, PayoutRepository::class);
+        $this->app->bind(AuditLogRepositoryInterface::class, AuditLogRepository::class);
         $this->app->bind(PaymentGatewayInterface::class, PaystackService::class);
     }
 

@@ -2,9 +2,11 @@
 
 namespace App\Actions;
 
+use App\Contracts\Repositories\AuditLogRepositoryInterface;
 use App\Contracts\Repositories\BadgeRepositoryInterface;
 use App\Contracts\Repositories\UserAchievementRepositoryInterface;
 use App\Contracts\Repositories\UserBadgeRepositoryInterface;
+use App\Enums\AuditType;
 use App\Events\BadgeUnlocked;
 use App\Models\Badge;
 use App\Models\User;
@@ -20,6 +22,7 @@ class UnlockBadgeAction
         private readonly UserAchievementRepositoryInterface $userAchievements,
         private readonly BadgeRepositoryInterface $badges,
         private readonly UserBadgeRepositoryInterface $userBadges,
+        private readonly AuditLogRepositoryInterface $auditLogs,
     ) {}
 
     /**
@@ -50,6 +53,13 @@ class UnlockBadgeAction
             $unlocked = $this->userBadges->unlock($user, $badge);
 
             event(new BadgeUnlocked($badge->name, $user));
+
+            $this->auditLogs->record(
+                $user,
+                AuditType::BadgeUnlocked,
+                "Unlocked badge: {$badge->name}",
+                ['badge_id' => $badge->id, 'slug' => $badge->slug],
+            );
 
             return $unlocked;
         });

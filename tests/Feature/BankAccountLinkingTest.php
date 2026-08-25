@@ -1,6 +1,8 @@
 <?php
 
+use App\Enums\AuditType;
 use App\Enums\PayoutStatus;
+use App\Models\AuditLog;
 use App\Models\Payout;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
@@ -33,6 +35,8 @@ test('an authenticated user can link their bank account', function () {
         ->and($bankAccount->paystack_recipient_code)->toBe('RCP_123')
         ->and($bankAccount->bank_code)->toBe('058')
         ->and($bankAccount->account_number)->toBe('0123456789');
+
+    expect(AuditLog::query()->where('user_id', $this->user->id)->where('type', AuditType::BankAccountLinked)->exists())->toBeTrue();
 });
 
 test('linking fails with a 422 when paystack rejects the account', function () {

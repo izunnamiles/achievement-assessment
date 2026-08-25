@@ -3,8 +3,10 @@
 namespace App\Actions;
 
 use App\Contracts\PaymentGatewayInterface;
+use App\Contracts\Repositories\AuditLogRepositoryInterface;
 use App\Contracts\Repositories\BankAccountRepositoryInterface;
 use App\Contracts\Repositories\PayoutRepositoryInterface;
+use App\Enums\AuditType;
 use App\Models\Payout;
 use App\Services\Payments\PaystackService;
 
@@ -18,6 +20,7 @@ class PayoutAction
         private readonly BankAccountRepositoryInterface $bankAccounts,
         private readonly PayoutRepositoryInterface $payouts,
         private readonly PaystackService $paystack,
+        private readonly AuditLogRepositoryInterface $auditLogs,
     ) {}
 
     /**
@@ -30,6 +33,8 @@ class PayoutAction
         if (! $this->bankAccounts->findForUser($payout->user)?->paystack_recipient_code) {
             // Nothing to send yet - stays pending until a bank account is
             // linked, at which point BankAccountAction retries it.
+            $this->logAttempt($payout, 'skipped_no_bank_account');
+
             return;
         }
 
@@ -43,6 +48,8 @@ class PayoutAction
         if (! $accepted) {
             $this->payouts->markAsFailed($payout);
         }
+
+        $this->logAttempt($payout, $accepted ? 'sent_accepted' : 'sent_rejected');
     }
 
     /**
@@ -52,10 +59,29 @@ class PayoutAction
     {
         $status = $this->paystack->verifyTransfer($payout->reference);
 
-        match ($status) {
+        $verified = match ($status) {
             'success' => $this->payouts->markAsPaid($payout),
             'failed', 'reversed' => $this->payouts->markAsFailed($payout),
-            default => null,
+            default => false,
         };
+
+        if ($verified) {
+            $this->auditLogs->record(
+                $payout->user,
+                AuditType::PayoutVerified,
+                "Verified payout: {$status}",
+                ['payout_id' => $payout->id, 'reference' => $payout->reference, 'status' => $status],
+            );
+        }
+    }
+
+    private function logAttempt(Payout $payout, string $outcome): void
+    {
+        $this->auditLogs->record(
+            $payout->user,
+            AuditType::PayoutAttempted,
+            "Attempted payout: {$outcome}",
+            ['payout_id' => $payout->id, 'reference' => $payout->reference, 'outcome' => $outcome],
+        );
     }
 }

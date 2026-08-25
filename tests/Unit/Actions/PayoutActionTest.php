@@ -2,8 +2,10 @@
 
 use App\Actions\PayoutAction;
 use App\Contracts\PaymentGatewayInterface;
+use App\Contracts\Repositories\AuditLogRepositoryInterface;
 use App\Contracts\Repositories\BankAccountRepositoryInterface;
 use App\Contracts\Repositories\PayoutRepositoryInterface;
+use App\Enums\AuditType;
 use App\Services\Payments\PaystackService;
 
 it('leaves the payout untouched when the user has no bank account on file', function () {
@@ -20,7 +22,15 @@ it('leaves the payout untouched when the user has no bank account on file', func
     $payouts = Mockery::mock(PayoutRepositoryInterface::class);
     $payouts->shouldNotReceive('markAsFailed');
 
-    (new PayoutAction($paymentGateway, $bankAccounts, $payouts, Mockery::mock(PaystackService::class)))->attempt($payout);
+    $auditLogs = Mockery::mock(AuditLogRepositoryInterface::class);
+    $auditLogs->shouldReceive('record')->once()->with(
+        $user,
+        AuditType::PayoutAttempted,
+        'Attempted payout: skipped_no_bank_account',
+        ['payout_id' => 1, 'reference' => 'ref-1', 'outcome' => 'skipped_no_bank_account'],
+    );
+
+    (new PayoutAction($paymentGateway, $bankAccounts, $payouts, Mockery::mock(PaystackService::class), $auditLogs))->attempt($payout);
 });
 
 it('leaves the payout pending when the gateway accepts it', function () {
@@ -38,7 +48,15 @@ it('leaves the payout pending when the gateway accepts it', function () {
     $payouts = Mockery::mock(PayoutRepositoryInterface::class);
     $payouts->shouldNotReceive('markAsFailed');
 
-    (new PayoutAction($paymentGateway, $bankAccounts, $payouts, Mockery::mock(PaystackService::class)))->attempt($payout);
+    $auditLogs = Mockery::mock(AuditLogRepositoryInterface::class);
+    $auditLogs->shouldReceive('record')->once()->with(
+        $user,
+        AuditType::PayoutAttempted,
+        'Attempted payout: sent_accepted',
+        ['payout_id' => 1, 'reference' => 'ref-1', 'outcome' => 'sent_accepted'],
+    );
+
+    (new PayoutAction($paymentGateway, $bankAccounts, $payouts, Mockery::mock(PaystackService::class), $auditLogs))->attempt($payout);
 });
 
 it('marks the payout as failed when the gateway rejects it', function () {
@@ -56,61 +74,99 @@ it('marks the payout as failed when the gateway rejects it', function () {
     $payouts = Mockery::mock(PayoutRepositoryInterface::class);
     $payouts->shouldReceive('markAsFailed')->once()->with($payout);
 
-    (new PayoutAction($paymentGateway, $bankAccounts, $payouts, Mockery::mock(PaystackService::class)))->attempt($payout);
+    $auditLogs = Mockery::mock(AuditLogRepositoryInterface::class);
+    $auditLogs->shouldReceive('record')->once()->with(
+        $user,
+        AuditType::PayoutAttempted,
+        'Attempted payout: sent_rejected',
+        ['payout_id' => 1, 'reference' => 'ref-1', 'outcome' => 'sent_rejected'],
+    );
+
+    (new PayoutAction($paymentGateway, $bankAccounts, $payouts, Mockery::mock(PaystackService::class), $auditLogs))->attempt($payout);
 });
 
 it('marks the payout as paid when Paystack reports success', function () {
-    $payout = makePayout(['id' => 1, 'reference' => 'ref-1']);
+    $user = makeUser(['id' => 1]);
+    $payout = makePayout(['id' => 1, 'reference' => 'ref-1'])->setRelation('user', $user);
 
     $paystack = Mockery::mock(PaystackService::class);
     $paystack->shouldReceive('verifyTransfer')->once()->with('ref-1')->andReturn('success');
 
     $payouts = Mockery::mock(PayoutRepositoryInterface::class);
-    $payouts->shouldReceive('markAsPaid')->once()->with($payout);
+    $payouts->shouldReceive('markAsPaid')->once()->with($payout)->andReturn(true);
+
+    $auditLogs = Mockery::mock(AuditLogRepositoryInterface::class);
+    $auditLogs->shouldReceive('record')->once()->with(
+        $user,
+        AuditType::PayoutVerified,
+        'Verified payout: success',
+        ['payout_id' => 1, 'reference' => 'ref-1', 'status' => 'success'],
+    );
 
     $action = new PayoutAction(
         Mockery::mock(PaymentGatewayInterface::class),
         Mockery::mock(BankAccountRepositoryInterface::class),
         $payouts,
         $paystack,
+        $auditLogs,
     );
 
     $action->verify($payout);
 });
 
 it('marks the payout as failed when Paystack reports failure', function () {
-    $payout = makePayout(['id' => 1, 'reference' => 'ref-1']);
+    $user = makeUser(['id' => 1]);
+    $payout = makePayout(['id' => 1, 'reference' => 'ref-1'])->setRelation('user', $user);
 
     $paystack = Mockery::mock(PaystackService::class);
     $paystack->shouldReceive('verifyTransfer')->once()->andReturn('failed');
 
     $payouts = Mockery::mock(PayoutRepositoryInterface::class);
-    $payouts->shouldReceive('markAsFailed')->once()->with($payout);
+    $payouts->shouldReceive('markAsFailed')->once()->with($payout)->andReturn(true);
+
+    $auditLogs = Mockery::mock(AuditLogRepositoryInterface::class);
+    $auditLogs->shouldReceive('record')->once()->with(
+        $user,
+        AuditType::PayoutVerified,
+        'Verified payout: failed',
+        ['payout_id' => 1, 'reference' => 'ref-1', 'status' => 'failed'],
+    );
 
     $action = new PayoutAction(
         Mockery::mock(PaymentGatewayInterface::class),
         Mockery::mock(BankAccountRepositoryInterface::class),
         $payouts,
         $paystack,
+        $auditLogs,
     );
 
     $action->verify($payout);
 });
 
 it('marks the payout as failed when Paystack reports the transfer was reversed', function () {
-    $payout = makePayout(['id' => 1, 'reference' => 'ref-1']);
+    $user = makeUser(['id' => 1]);
+    $payout = makePayout(['id' => 1, 'reference' => 'ref-1'])->setRelation('user', $user);
 
     $paystack = Mockery::mock(PaystackService::class);
     $paystack->shouldReceive('verifyTransfer')->once()->andReturn('reversed');
 
     $payouts = Mockery::mock(PayoutRepositoryInterface::class);
-    $payouts->shouldReceive('markAsFailed')->once()->with($payout);
+    $payouts->shouldReceive('markAsFailed')->once()->with($payout)->andReturn(true);
+
+    $auditLogs = Mockery::mock(AuditLogRepositoryInterface::class);
+    $auditLogs->shouldReceive('record')->once()->with(
+        $user,
+        AuditType::PayoutVerified,
+        'Verified payout: reversed',
+        ['payout_id' => 1, 'reference' => 'ref-1', 'status' => 'reversed'],
+    );
 
     $action = new PayoutAction(
         Mockery::mock(PaymentGatewayInterface::class),
         Mockery::mock(BankAccountRepositoryInterface::class),
         $payouts,
         $paystack,
+        $auditLogs,
     );
 
     $action->verify($payout);
@@ -126,11 +182,39 @@ it('leaves the payout untouched while Paystack still reports it pending', functi
     $payouts->shouldNotReceive('markAsPaid');
     $payouts->shouldNotReceive('markAsFailed');
 
+    $auditLogs = Mockery::mock(AuditLogRepositoryInterface::class);
+    $auditLogs->shouldNotReceive('record');
+
     $action = new PayoutAction(
         Mockery::mock(PaymentGatewayInterface::class),
         Mockery::mock(BankAccountRepositoryInterface::class),
         $payouts,
         $paystack,
+        $auditLogs,
+    );
+
+    $action->verify($payout);
+});
+
+it('does not log a verification when markAsPaid loses the race to another process', function () {
+    $user = makeUser(['id' => 1]);
+    $payout = makePayout(['id' => 1, 'reference' => 'ref-1'])->setRelation('user', $user);
+
+    $paystack = Mockery::mock(PaystackService::class);
+    $paystack->shouldReceive('verifyTransfer')->once()->andReturn('success');
+
+    $payouts = Mockery::mock(PayoutRepositoryInterface::class);
+    $payouts->shouldReceive('markAsPaid')->once()->with($payout)->andReturn(false);
+
+    $auditLogs = Mockery::mock(AuditLogRepositoryInterface::class);
+    $auditLogs->shouldNotReceive('record');
+
+    $action = new PayoutAction(
+        Mockery::mock(PaymentGatewayInterface::class),
+        Mockery::mock(BankAccountRepositoryInterface::class),
+        $payouts,
+        $paystack,
+        $auditLogs,
     );
 
     $action->verify($payout);

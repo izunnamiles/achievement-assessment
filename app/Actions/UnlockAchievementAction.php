@@ -3,9 +3,11 @@
 namespace App\Actions;
 
 use App\Contracts\Repositories\AchievementRepositoryInterface;
+use App\Contracts\Repositories\AuditLogRepositoryInterface;
 use App\Contracts\Repositories\PurchaseRepositoryInterface;
 use App\Contracts\Repositories\UserAchievementRepositoryInterface;
 use App\Enums\AchievementType;
+use App\Enums\AuditType;
 use App\Events\AchievementUnlocked;
 use App\Models\Achievement;
 use App\Models\User;
@@ -21,6 +23,7 @@ class UnlockAchievementAction
         private readonly PurchaseRepositoryInterface $purchases,
         private readonly AchievementRepositoryInterface $achievements,
         private readonly UserAchievementRepositoryInterface $userAchievements,
+        private readonly AuditLogRepositoryInterface $auditLogs,
     ) {}
 
     /**
@@ -53,6 +56,13 @@ class UnlockAchievementAction
             $unlocked = $this->userAchievements->unlock($user, $achievement);
 
             event(new AchievementUnlocked($achievement->name, $user));
+
+            $this->auditLogs->record(
+                $user,
+                AuditType::AchievementUnlocked,
+                "Unlocked achievement: {$achievement->name}",
+                ['achievement_id' => $achievement->id, 'slug' => $achievement->slug],
+            );
 
             return $unlocked;
         });

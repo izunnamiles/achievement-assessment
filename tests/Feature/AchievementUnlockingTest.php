@@ -2,6 +2,8 @@
 
 use App\Actions\RecordPurchaseAction;
 use App\Contracts\Repositories\ProductRepositoryInterface;
+use App\Enums\AuditType;
+use App\Models\AuditLog;
 use App\Models\Product;
 use App\Models\User;
 
@@ -17,6 +19,9 @@ test('a user unlocks the first purchase achievement on their first purchase', fu
 
     expect($this->user->achievements()->where('slug', 'first-purchase')->exists())->toBeTrue()
         ->and($this->user->achievements()->where('slug', '5-purchases')->exists())->toBeFalse();
+
+    expect(AuditLog::query()->where('user_id', $this->user->id)->where('type', AuditType::Purchase)->exists())->toBeTrue()
+        ->and(AuditLog::query()->where('user_id', $this->user->id)->where('type', AuditType::AchievementUnlocked)->exists())->toBeTrue();
 });
 
 test('a user unlocks the 5 purchases achievement on their fifth purchase', function () {

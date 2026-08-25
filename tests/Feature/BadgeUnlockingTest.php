@@ -2,8 +2,10 @@
 
 use App\Actions\RecordPurchaseAction;
 use App\Contracts\PaymentGatewayInterface;
+use App\Enums\AuditType;
 use App\Enums\PayoutStatus;
 use App\Events\BadgeUnlocked;
+use App\Models\AuditLog;
 use App\Models\BankAccount;
 use App\Models\Payout;
 use App\Models\Product;
@@ -29,6 +31,8 @@ test('a user unlocks a badge once they cross its achievement threshold', functio
     unlockBothAchievementsFor($this->user);
 
     expect($this->user->badges()->where('slug', 'bronze-achiever')->exists())->toBeTrue();
+
+    expect(AuditLog::query()->where('user_id', $this->user->id)->where('type', AuditType::BadgeUnlocked)->exists())->toBeTrue();
 });
 
 test('a badge is never unlocked twice for the same user', function () {
