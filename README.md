@@ -4,16 +4,16 @@ A Laravel 13 / PHP 8.3 API that gamifies a simple purchase flow: users buy produ
 
 ## Design choices
 
-- **Repository pattern** — every model has a `Contracts\Repositories\*Interface` bound to a `Repositories\*` implementation in `AppServiceProvider`, keeping controllers/actions decoupled from Eloquent.
-- **Actions** — single-purpose classes in `app/Actions` (`RecordPurchaseAction`, `UnlockAchievementAction`, `UnlockBadgeAction`, `PayoutAction`, `BankAccountAction`) encapsulate each unit of business logic. `UnlockAchievementAction`/`UnlockBadgeAction` each pair a "check every eligible one for this user" method with a "unlock this one" method; `PayoutAction` pairs "attempt" (send via the gateway) with "verify" (reconcile against Paystack).
-- **Events & queued listeners** — achievement/badge unlocking and the Paystack payout run as `ShouldQueue` listeners off the request cycle, processed by a dedicated `worker` container/process.
-- **Race-safety** — unlock actions and the payout listener wrap their check-then-act logic in `Cache::lock()`, backed by unique DB constraints on `(user_id, achievement_id)` and `(user_id, badge_id)` as a second line of defense against concurrent queue workers double-unlocking. Payouts get the same protection a different way: `firstOrCreatePending` is keyed on `(user_id, reason)`, so a retried/redelivered queue job reuses the existing payout instead of creating (and paying) a second one.
-- **Payout lifecycle** — a badge unlock creates a `Payout` (`Pending` → `Paid`/`Failed`). It's reconciled two ways: a Paystack webhook (`POST /api/paystack/webhook`, authenticated via HMAC-SHA512 signature verification instead of a JWT) updates it as soon as Paystack calls back, and the `php artisan payouts:verify` console command polls Paystack directly for any payout still `Pending` — useful as a fallback if a webhook delivery is missed. Linking a bank account after a payout was stuck pending (no `paystack_recipient_code` yet) automatically retries it via `BankAccountAction`.
-- **Payment gateway abstraction** — `PaymentGatewayInterface` / `PaystackService` isolates the Paystack HTTP calls so the gateway can be swapped or mocked in tests.
-- **API Resources** — `app/Http/Resources` (`ProductResource`, `PurchaseResource`, `AchievementResource`, `UserAchievementResource`) shape every JSON response by hand, so internal IDs and foreign keys are never accidentally exposed.
-- **Audit log** — every Action records what it did to an `audit_logs` table (`AuditLogRepositoryInterface`) as it happens: purchases, achievement/badge unlocks, bank account links, and payout attempts/verifications (I felt like it's something that should be needed internally for record-keeping use).
-- **UUID route keys** — `User`, `Product`, and `Purchase` use a `HasUuid` trait so they're referenced by UUID (not incrementing ID, so as not to expose primary keys) in URLs and API responses.
-- **JWT auth** — `tymon/jwt-auth` provides the `api` guard; no session-based auth.
+- **Repository pattern** — every model has a `Contracts\Repositories\*Interface` bound to a `Repositories\*` implementation in `AppServiceProvider`, so controllers and actions never touch Eloquent directly.
+- **Actions** — business logic stays out of controllers; each unit of it lives in its own single-purpose class under `app/Actions` (`RecordPurchaseAction`, `UnlockAchievementAction`, `UnlockBadgeAction`, `PayoutAction`, `BankAccountAction`). `UnlockAchievementAction`/`UnlockBadgeAction` each pair a "check every eligible one for this user" method with a "unlock this one" method, and `PayoutAction` pairs "attempt" (send via the gateway) with "verify" (reconcile against Paystack) — these were merged once it became clear how similar the original classes were to each other.
+- **Events & queued listeners** — to avoid a slow Paystack call holding up a purchase response, achievement/badge unlocking and the payout itself run as `ShouldQueue` listeners off the request cycle, handled by a dedicated `worker` container/process.
+- **Race-safety** — since the unlock actions and the payout listener all do a check-then-act, that logic is wrapped in `Cache::lock()` and backed by unique DB constraints on `(user_id, achievement_id)` and `(user_id, badge_id)`, in case two queue workers ever pick up the same job. Payouts are handled a little differently: `firstOrCreatePending` is keyed on `(user_id, reason)`, so a retried/redelivered queue job just finds the existing payout instead of creating (and paying) a second one.
+- **Payout lifecycle** — a badge unlock creates a `Payout` (`Pending` → `Paid`/`Failed`). Rather than relying on a single reconciliation path, two are wired up: a Paystack webhook (`POST /api/paystack/webhook`, authenticated via HMAC-SHA512 signature verification since Paystack has no JWT of its own to send) updates it as soon as Paystack calls back, and a `php artisan payouts:verify` command polls Paystack directly for anything still `Pending`, as a fallback in case a webhook delivery gets missed. Linking a bank account after a payout got stuck pending (no `paystack_recipient_code` yet) automatically retries it, via `BankAccountAction`.
+- **Payment gateway abstraction** — `PaymentGatewayInterface` / `PaystackService` sit between the app and Paystack's HTTP API, so the gateway can be swapped or mocked out in tests without touching anything else.
+- **API Resources** — every response gets a hand-written Resource class (`ProductResource`, `PurchaseResource`, `AchievementResource`, `UserAchievementResource`) instead of returning raw models, so an internal ID or foreign key never accidentally leaks into the JSON.
+- **Audit log** — every Action records what it did to an `audit_logs` table (`AuditLogRepositoryInterface`) as it happens — purchases, achievement/badge unlocks, bank account links, payout attempts/verifications — kept for internal record-keeping.
+- **UUID route keys** — `User`, `Product`, and `Purchase` share a `HasUuid` trait so they're referenced by UUID rather than their incrementing ID, keeping primary keys out of URLs and API responses.
+- **JWT auth** — `tymon/jwt-auth` provides the `api` guard instead of session-based auth, since this is a pure API with no browser session to lean on.
 
 ## Tech stack
 
@@ -72,7 +72,13 @@ php artisan migrate --seed
 php artisan serve
 ```
 
-Set `PAYSTACK_SECRET_KEY` / `PAYSTACK_BASE_URL` in `.env` if you want badge payouts to actually call Paystack.
+`QUEUE_CONNECTION=database` by default, so achievement/badge unlocking and payouts are queued, not processed inline — run a worker in a separate terminal or nothing past the purchase itself will happen:
+
+```bash
+php artisan queue:work
+```
+
+Set `PAYSTACK_SECRET_KEY` / `PAYSTACK_BASE_URL` in `.env` for integration with the Paystack transfer API for payouts.
 
 A seeded test user is available: `test@example.com` / `password@123`.
 
