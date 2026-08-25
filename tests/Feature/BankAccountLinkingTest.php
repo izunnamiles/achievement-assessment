@@ -5,6 +5,10 @@ use App\Models\Payout;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
 
+beforeEach(function () {
+    $this->user = User::factory()->create();
+});
+
 test('an authenticated user can link their bank account', function () {
     Http::fake([
         '*/transferrecipient' => Http::response([
@@ -13,8 +17,7 @@ test('an authenticated user can link their bank account', function () {
         ], 200),
     ]);
 
-    $user = User::factory()->create();
-    $token = auth('api')->login($user);
+    $token = auth('api')->login($this->user);
 
     $this->withToken($token)
         ->postJson('/api/bank-account', [
@@ -24,7 +27,7 @@ test('an authenticated user can link their bank account', function () {
         ->assertOk()
         ->assertJson(['message' => 'Bank account linked successfully.']);
 
-    $bankAccount = $user->bankAccount;
+    $bankAccount = $this->user->bankAccount;
 
     expect($bankAccount)->not->toBeNull()
         ->and($bankAccount->paystack_recipient_code)->toBe('RCP_123')
@@ -37,8 +40,7 @@ test('linking fails with a 422 when paystack rejects the account', function () {
         '*/transferrecipient' => Http::response(['status' => false, 'message' => 'Invalid account'], 400),
     ]);
 
-    $user = User::factory()->create();
-    $token = auth('api')->login($user);
+    $token = auth('api')->login($this->user);
 
     $this->withToken($token)
         ->postJson('/api/bank-account', [
@@ -47,7 +49,7 @@ test('linking fails with a 422 when paystack rejects the account', function () {
         ])
         ->assertStatus(422);
 
-    expect($user->bankAccount)->toBeNull();
+    expect($this->user->bankAccount)->toBeNull();
 });
 
 test('linking a bank account auto-initiates any payout that was stuck waiting for one', function () {
@@ -56,9 +58,8 @@ test('linking a bank account auto-initiates any payout that was stuck waiting fo
         '*/transfer' => Http::response(['status' => true], 200),
     ]);
 
-    $user = User::factory()->create();
-    $payout = Payout::factory()->create(['user_id' => $user->id, 'status' => PayoutStatus::Pending]);
-    $token = auth('api')->login($user);
+    $payout = Payout::factory()->create(['user_id' => $this->user->id, 'status' => PayoutStatus::Pending]);
+    $token = auth('api')->login($this->user);
 
     $this->withToken($token)
         ->postJson('/api/bank-account', [
@@ -73,8 +74,7 @@ test('linking a bank account auto-initiates any payout that was stuck waiting fo
 });
 
 test('account_number must be exactly 10 digits', function () {
-    $user = User::factory()->create();
-    $token = auth('api')->login($user);
+    $token = auth('api')->login($this->user);
 
     $this->withToken($token)
         ->postJson('/api/bank-account', [

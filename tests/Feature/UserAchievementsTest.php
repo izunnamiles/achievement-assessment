@@ -9,13 +9,16 @@ use App\Models\User;
 // threshold 2, 'Silver Achiever' threshold 3, ...) these tests exercise are
 // all seeded directly by their respective migrations, so they already exist.
 
+beforeEach(function () {
+    $this->user = User::factory()->create();
+});
+
 test('it lists unlocked and next-available achievements for a user with partial progress', function () {
-    $user = User::factory()->create();
     $product = Product::factory()->create(['stock' => 1]);
 
-    app(RecordPurchaseAction::class)->execute($user, $product);
+    app(RecordPurchaseAction::class)->execute($this->user, $product);
 
-    $response = $this->getJson("/users/{$user->uuid}/achievements");
+    $response = $this->getJson("/users/{$this->user->uuid}/achievements");
 
     $response->assertOk()->assertExactJson([
         'unlocked_achievements' => ['First Purchase'],
@@ -27,15 +30,14 @@ test('it lists unlocked and next-available achievements for a user with partial 
 });
 
 test('next_available_achievements is empty once every achievement in the group is unlocked', function () {
-    $user = User::factory()->create();
     $product = Product::factory()->create(['stock' => 5]);
     $recordPurchase = app(RecordPurchaseAction::class);
 
     for ($i = 1; $i <= 5; $i++) {
-        $recordPurchase->execute($user, $product);
+        $recordPurchase->execute($this->user, $product);
     }
 
-    $response = $this->getJson("/users/{$user->uuid}/achievements");
+    $response = $this->getJson("/users/{$this->user->uuid}/achievements");
 
     $response->assertOk()->assertExactJson([
         'unlocked_achievements' => ['First Purchase', '5 Purchases'],
@@ -47,9 +49,7 @@ test('next_available_achievements is empty once every achievement in the group i
 });
 
 test('a user with no purchases has nothing unlocked and the lowest-threshold achievement as next available', function () {
-    $user = User::factory()->create();
-
-    $response = $this->getJson("/users/{$user->uuid}/achievements");
+    $response = $this->getJson("/users/{$this->user->uuid}/achievements");
 
     $response->assertOk()->assertExactJson([
         'unlocked_achievements' => [],
@@ -61,13 +61,9 @@ test('a user with no purchases has nothing unlocked and the lowest-threshold ach
 });
 
 test('the endpoint is publicly accessible without authentication', function () {
-    $user = User::factory()->create();
-
-    $this->getJson("/users/{$user->uuid}/achievements")->assertOk();
+    $this->getJson("/users/{$this->user->uuid}/achievements")->assertOk();
 });
 
 test('it resolves the user by uuid, not the internal id', function () {
-    $user = User::factory()->create();
-
-    $this->getJson("/users/{$user->id}/achievements")->assertNotFound();
+    $this->getJson("/users/{$this->user->id}/achievements")->assertNotFound();
 });
